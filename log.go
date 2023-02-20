@@ -29,7 +29,7 @@ func NewLogger(dir string) *Logger {
 	)
 
 	logger := new(Logger)
-	logger.driver = zap.New(core, zap.AddCallerSkip(1), zap.AddCaller())
+	logger.driver = zap.New(core, zap.AddCallerSkip(2), zap.AddCaller())
 	return logger
 }
 
