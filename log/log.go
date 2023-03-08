@@ -6,16 +6,30 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-var infoLogger *zap.Logger
-var errorLogger *zap.Logger
+var _logger *logger
+var errlogger *errLogger
 
-func Init(dir string) {
-	w := zapcore.AddSync(&lumberjack.Logger{
-		Filename:   "/var/log/" + dir + "/info.log",
+func NewConfig(dir string) Configure {
+	return &config{
+		Dir:  dir,
+		Path: ".",
+	}
+}
+
+func Init(c Configure) error {
+	lumberjackLogger := &lumberjack.Logger{
+		Filename:   c.GetPath() + "/" + c.GetDir() + "/process.log",
 		MaxSize:    25, // megabytes
 		MaxBackups: 20,
 		MaxAge:     28, // days
-	})
+	}
+
+	_, err := lumberjackLogger.Write([]byte(""))
+	if err != nil {
+		return err
+	}
+
+	w := zapcore.AddSync(lumberjackLogger)
 
 	encoderConfig := zap.NewProductionEncoderConfig()
 	encoderConfig.TimeKey = "time"
@@ -27,14 +41,22 @@ func Init(dir string) {
 		zap.InfoLevel,
 	)
 
-	infoLogger = zap.New(core)
+	logger := new(logger)
+	logger.driver = zap.New(core)
+	_logger = logger
 
-	w = zapcore.AddSync(&lumberjack.Logger{
-		Filename:   "/var/log/" + dir + "/error.log",
-		MaxSize:    5, // megabytes
-		MaxBackups: 10,
+	lumberjackLogger = &lumberjack.Logger{
+		Filename:   c.GetPath() + "/" + c.GetDir() + "/error.log",
+		MaxSize:    25, // megabytes
+		MaxBackups: 20,
 		MaxAge:     28, // days
-	})
+	}
+	_, err = lumberjackLogger.Write([]byte(""))
+	if err != nil {
+		return err
+	}
+
+	w = zapcore.AddSync(lumberjackLogger)
 
 	encoderConfig = zap.NewProductionEncoderConfig()
 	encoderConfig.TimeKey = "time"
@@ -43,20 +65,48 @@ func Init(dir string) {
 	core = zapcore.NewCore(
 		zapcore.NewJSONEncoder(encoderConfig),
 		w,
-		zap.InfoLevel,
+		zap.ErrorLevel,
 	)
 
-	errorLogger = zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1))
+	eLogger := new(errLogger)
+	eLogger.driver = zap.New(core)
+	errlogger = eLogger
+
+	return nil
+}
+
+type Configure interface {
+	SetPath(path string)
+	GetPath() string
+	GetDir() string
+}
+type config struct {
+	Dir  string
+	Path string
+}
+
+func (c *config) SetPath(path string) {
+	c.Path = path
+}
+func (c *config) GetPath() string {
+	return c.Path
+}
+func (c *config) GetDir() string {
+	return c.Dir
+}
+
+type logger struct {
+	driver *zap.Logger
 }
 
 func Info(msg string) {
-	infoLogger.Info(msg)
+	_logger.driver.Info(msg)
+}
+
+type errLogger struct {
+	driver *zap.Logger
 }
 
 func Error(msg string) {
-	errorLogger.Error(msg)
-}
-
-func Warn(msg string) {
-	errorLogger.Warn(msg)
+	errlogger.driver.Error(msg)
 }
