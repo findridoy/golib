@@ -47,6 +47,7 @@ func Init(c Configure) error {
 
 	logger := new(logger)
 	logger.driver = zap.New(core)
+	logger.isEnabled = true
 	_logger = logger
 
 	lumberjackLogger = &lumberjack.Logger{
