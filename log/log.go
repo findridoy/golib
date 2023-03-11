@@ -1,6 +1,7 @@
 package log
 
 import (
+	"errors"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -17,8 +18,12 @@ func NewConfig(dir string) Configure {
 }
 
 func Init(c Configure) error {
+	config, ok := c.(*config)
+	if !ok {
+		return errors.New("invalid config type")
+	}
 	lumberjackLogger := &lumberjack.Logger{
-		Filename:   c.GetPath() + "/" + c.GetDir() + "/process.log",
+		Filename:   config.Path + "/" + config.Dir + "/process.log",
 		MaxSize:    25, // megabytes
 		MaxBackups: 20,
 		MaxAge:     28, // days
@@ -46,7 +51,7 @@ func Init(c Configure) error {
 	_logger = logger
 
 	lumberjackLogger = &lumberjack.Logger{
-		Filename:   c.GetPath() + "/" + c.GetDir() + "/error.log",
+		Filename:   config.Path + "/" + config.Dir + "/error.log",
 		MaxSize:    25, // megabytes
 		MaxBackups: 20,
 		MaxAge:     28, // days
@@ -77,8 +82,6 @@ func Init(c Configure) error {
 
 type Configure interface {
 	SetPath(path string)
-	GetPath() string
-	GetDir() string
 }
 type config struct {
 	Dir  string
@@ -87,12 +90,6 @@ type config struct {
 
 func (c *config) SetPath(path string) {
 	c.Path = path
-}
-func (c *config) GetPath() string {
-	return c.Path
-}
-func (c *config) GetDir() string {
-	return c.Dir
 }
 
 type logger struct {

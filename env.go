@@ -2,7 +2,7 @@ package golib
 
 import (
 	"bufio"
-	"log"
+	"errors"
 	"os"
 	"strings"
 )
@@ -19,7 +19,7 @@ func LoadENV(path string) error {
 		if len(scanner.Text()) > 0 { // this check eliminates empty line consideration
 			// what if line start with a space?
 			if scanner.Text()[0] == 32 {
-				log.Fatalln("line can not start with space")
+				return errors.New("line can not start with space")
 			}
 
 			// line start with #?
