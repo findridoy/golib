@@ -16,7 +16,6 @@ func NewConfig(dir string) Configure {
 		Path: ".",
 	}
 }
-
 func Init(c Configure) error {
 	config, ok := c.(*config)
 	if !ok {
@@ -79,10 +78,33 @@ func Init(c Configure) error {
 
 	return nil
 }
+func EnableLog() error {
+	if _logger == nil {
+		return errors.New("logger is not initialized")
+	}
+	_logger.isEnabled = true
+	return nil
+}
+func DisableLog() error {
+	if _logger == nil {
+		return errors.New("logger is not initialized")
+	}
+	_logger.isEnabled = false
+	return nil
+}
+func Info(msg string) {
+	if _logger.isEnabled {
+		_logger.driver.Info(msg)
+	}
+}
+func Error(msg string) {
+	errlogger.driver.Error(msg)
+}
 
 type Configure interface {
 	SetPath(path string)
 }
+
 type config struct {
 	Dir  string
 	Path string
@@ -93,17 +115,9 @@ func (c *config) SetPath(path string) {
 }
 
 type logger struct {
-	driver *zap.Logger
+	driver    *zap.Logger
+	isEnabled bool
 }
-
-func Info(msg string) {
-	_logger.driver.Info(msg)
-}
-
 type errLogger struct {
 	driver *zap.Logger
-}
-
-func Error(msg string) {
-	errlogger.driver.Error(msg)
 }
