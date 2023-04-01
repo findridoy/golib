@@ -8,13 +8,15 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+var validate = validator.New()
+
 func BindNValidate(c echo.Context, out interface{}) error {
 	err := c.Bind(out)
 	if err != nil {
 		return err
 	}
 
-	if err != nil {
+	if err := validate.Struct(out); err != nil {
 		for _, v := range err.(validator.ValidationErrors) {
 			field := ToSnakeCase(v.Field())
 			msg := ""
