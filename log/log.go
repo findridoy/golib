@@ -2,104 +2,46 @@ package log
 
 import (
 	"errors"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"gopkg.in/natefinch/lumberjack.v2"
+	"fmt"
+	"os"
+	"strings"
+	"sync"
+	"time"
 )
 
-var _logger *logger
-var errlogger *errLogger
+var lgr *logger
 
-func NewConfig(dir string) Configure {
+func NewConfig() Configure {
 	return &config{
-		Dir:  dir,
+		Dir:  "log",
 		Path: ".",
 	}
 }
+
 func Init(c Configure) error {
 	config, ok := c.(*config)
 	if !ok {
 		return errors.New("invalid config type")
 	}
-	lumberjackLogger := &lumberjack.Logger{
-		Filename:   config.Path + "/" + config.Dir + "/process.log",
-		MaxSize:    25, // megabytes
-		MaxBackups: 20,
-		MaxAge:     28, // days
-	}
 
-	_, err := lumberjackLogger.Write([]byte(""))
-	if err != nil {
+	logDir := config.Path + "/" + config.Dir
+	logFile := logDir + "/" + "process.log"
+
+	if err := os.MkdirAll(logDir, os.ModePerm); err != nil {
 		return err
 	}
 
-	w := zapcore.AddSync(lumberjackLogger)
-
-	encoderConfig := zap.NewProductionEncoderConfig()
-	encoderConfig.TimeKey = "time"
-	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-
-	core := zapcore.NewCore(
-		zapcore.NewJSONEncoder(encoderConfig),
-		w,
-		zap.InfoLevel,
-	)
-
-	logger := new(logger)
-	logger.driver = zap.New(core)
-	logger.isEnabled = true
-	_logger = logger
-
-	lumberjackLogger = &lumberjack.Logger{
-		Filename:   config.Path + "/" + config.Dir + "/error.log",
-		MaxSize:    25, // megabytes
-		MaxBackups: 20,
-		MaxAge:     28, // days
-	}
-	_, err = lumberjackLogger.Write([]byte(""))
+	file, err := os.OpenFile(logFile, os.O_CREATE, 0644)
 	if err != nil {
 		return err
 	}
+	defer file.Close()
 
-	w = zapcore.AddSync(lumberjackLogger)
-
-	encoderConfig = zap.NewProductionEncoderConfig()
-	encoderConfig.TimeKey = "time"
-	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-
-	core = zapcore.NewCore(
-		zapcore.NewJSONEncoder(encoderConfig),
-		w,
-		zap.ErrorLevel,
-	)
-
-	eLogger := new(errLogger)
-	eLogger.driver = zap.New(core)
-	errlogger = eLogger
+	lgr = &logger{
+		logFile: logFile,
+	}
 
 	return nil
-}
-func EnableLog() error {
-	if _logger == nil {
-		return errors.New("logger is not initialized")
-	}
-	_logger.isEnabled = true
-	return nil
-}
-func DisableLog() error {
-	if _logger == nil {
-		return errors.New("logger is not initialized")
-	}
-	_logger.isEnabled = false
-	return nil
-}
-func Info(msg string) {
-	if _logger.isEnabled {
-		_logger.driver.Info(msg)
-	}
-}
-func Error(msg string) {
-	errlogger.driver.Error(msg)
 }
 
 type Configure interface {
@@ -116,9 +58,66 @@ func (c *config) SetPath(path string) {
 }
 
 type logger struct {
-	driver    *zap.Logger
+	mutex     sync.Mutex
+	logFile   string
 	isEnabled bool
 }
-type errLogger struct {
-	driver *zap.Logger
+
+func Info(msg string) {
+	lgr.mutex.Lock()
+	defer lgr.mutex.Unlock()
+
+	file, err := os.OpenFile(lgr.logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return
+	}
+
+	if fileInfo.Size() > 1024*1024*5 {
+		divs := strings.Split(lgr.logFile, "/")
+		fileName := divs[len(divs)-1]
+
+		logDir := strings.Join(divs[:len(divs)-1], "/")
+
+		newFilePath := logDir + "/" + time.Now().Format("2006_01_02_150405") + fileName
+
+		err := os.Rename(lgr.logFile, newFilePath)
+		if err != nil {
+			return
+		}
+
+		_, err = os.Create(lgr.logFile)
+		if err != nil {
+			return
+		}
+	}
+
+	message := time.Now().Format(time.RFC3339) + " INFO: " + msg
+
+	file.WriteString(message + "\n")
+}
+
+func Error(msg string) {
+	lgr.mutex.Lock()
+	defer lgr.mutex.Unlock()
+
+	file, err := os.OpenFile(lgr.logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+
+	message := time.Now().Format(time.RFC3339) + " ERROR: " + msg
+
+	file.WriteString(message + "\n")
+}
+
+func Fatalln(err error) {
+	fmt.Println(err)
+	os.Exit(1)
 }
