@@ -12,6 +12,6 @@ func Hash(plain string) string {
 	if err != nil {
 		return ""
 	}
-	resultingHash := hash.Sum([]byte(os.Getenv("SECRET_KEY")))
+	resultingHash := hash.Sum([]byte(os.Getenv("SECRET")))
 	return fmt.Sprintf("%x", resultingHash)
 }
