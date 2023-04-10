@@ -10,10 +10,11 @@ import (
 )
 
 var lgr *logger
+var errlgr *errLogger
 
 func NewConfig() Configure {
 	return &config{
-		Dir:  "log",
+		Dir:  "logs",
 		Path: ".",
 	}
 }
@@ -26,6 +27,7 @@ func Init(c Configure) error {
 
 	logDir := config.Path + "/" + config.Dir
 	logFile := logDir + "/" + "process.log"
+	errorLogFile := logDir + "/" + "error.log"
 
 	if err := os.MkdirAll(logDir, os.ModePerm); err != nil {
 		return err
@@ -39,6 +41,16 @@ func Init(c Configure) error {
 
 	lgr = &logger{
 		logFile: logFile,
+	}
+
+	errorFile, err := os.OpenFile(errorLogFile, os.O_CREATE, 0644)
+	if err != nil {
+		return err
+	}
+	defer errorFile.Close()
+
+	errlgr = &errLogger{
+		logFile: errorLogFile,
 	}
 
 	return nil
@@ -58,6 +70,12 @@ func (c *config) SetPath(path string) {
 }
 
 type logger struct {
+	mutex     sync.Mutex
+	logFile   string
+	isEnabled bool
+}
+
+type errLogger struct {
 	mutex     sync.Mutex
 	logFile   string
 	isEnabled bool
@@ -97,22 +115,46 @@ func Info(msg string) {
 		}
 	}
 
-	message := time.Now().Format(time.RFC3339) + " INFO: " + msg
+	message := time.Now().Format(time.RFC3339) + " " + msg
 
 	file.WriteString(message + "\n")
 }
 
 func Error(msg string) {
-	lgr.mutex.Lock()
-	defer lgr.mutex.Unlock()
+	errlgr.mutex.Lock()
+	defer errlgr.mutex.Unlock()
 
-	file, err := os.OpenFile(lgr.logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	file, err := os.OpenFile(errlgr.logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		return
 	}
 	defer file.Close()
 
-	message := time.Now().Format(time.RFC3339) + " ERROR: " + msg
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return
+	}
+
+	if fileInfo.Size() > 1024*1024*5 {
+		divs := strings.Split(errlgr.logFile, "/")
+		fileName := divs[len(divs)-1]
+
+		logDir := strings.Join(divs[:len(divs)-1], "/")
+
+		newFilePath := logDir + "/" + time.Now().Format("2006_01_02_150405") + fileName
+
+		err := os.Rename(errlgr.logFile, newFilePath)
+		if err != nil {
+			return
+		}
+
+		_, err = os.Create(errlgr.logFile)
+		if err != nil {
+			return
+		}
+	}
+
+	message := time.Now().Format(time.RFC3339) + " " + msg
 
 	file.WriteString(message + "\n")
 }
