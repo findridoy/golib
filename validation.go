@@ -1,7 +1,8 @@
 package golib
 
 import (
-	"errors"
+	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/go-playground/validator/v10"
@@ -17,6 +18,7 @@ func BindNValidate(c echo.Context, out interface{}) error {
 	}
 
 	if err := validate.Struct(out); err != nil {
+		er := map[string]string{}
 		for _, v := range err.(validator.ValidationErrors) {
 			field := ToSnakeCase(v.Field())
 			msg := ""
@@ -36,9 +38,13 @@ func BindNValidate(c echo.Context, out interface{}) error {
 				msg = field + " " + strings.ToLower(v.Tag())
 			}
 
-			return errors.New(msg)
+			er[field] = msg
 		}
-		return nil
+		b, err := json.Marshal(er)
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("%s", b)
 	}
 	return nil
 }
